@@ -15,15 +15,17 @@
 -type string_type()       :: string() | binary() | atom().
 -type params_type()       :: positional_params() | named_params() | undefined.
 -type id_type()           :: string() | integer().
--type reply_type()        :: term().
--type reply_error()       :: {parse_error, any()} | {response_error, any()}.
+-type reply_type()        :: {reply, term()}.
+-type reply_error()       :: {error, {parse_error, any()}
+                                   | {invalid_response, string()
+                                   | {call_error, #{binary() => any()}}}}.
 
--type encoder_fn()       :: fun((map())                                  -> binary()).
--type decoder_fn()       :: fun((binary())                               -> map()).
--type call_handler_fn()  :: fun((params_type())                          -> any()).
--type reply_handler_fn() :: fun((id_type(), reply_type())                -> any()).
--type call_mapper_fn()   :: fun((call_handler_fn(), list(params_type())) -> list(any())).
--type reply_mapper_fn()  :: fun((reply_handler_fn(), list(reply_type())) -> list(any())).
+-type encoder_fn()       :: fun((map())                                   -> binary()).
+-type decoder_fn()       :: fun((binary())                                -> map()).
+-type call_handler_fn()  :: fun((params_type())                           -> any()).
+-type reply_handler_fn() :: fun((id_type(), reply_type() | reply_error()) -> any()).
+-type call_mapper_fn()   :: fun((call_handler_fn(), list(params_type()))  -> list(any())).
+-type reply_mapper_fn()  :: fun((reply_handler_fn(), list(reply_type()))  -> list(any())).
 
 -define(FLAT_FORMAT(Format, Data), lists:flatten(io_lib:format(Format, Data))).
 
@@ -154,52 +156,69 @@ handle_response(Payload, Handler, Decode, MapFn) ->
     Decoded when is_map(Decoded) ->
       response_handler_wrapper(Decoded, Handler);
     Decoded ->
-      {response_error, ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}
+      {error, {invalid_response, ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}}
   catch
     Error ->
-      {parse_error, Error}
+      {error, {parse_error, Error}}
   end.
 
 %% Internals
 
 response_handler_wrapper(Response, Handler) ->
-  CallObj = try
-              begin
-                try maps:get(<<"jsonrpc">>, Response) of
-                  Version when Version /= <<"2.0">> ->
-                    throw({invalid_response, "Value of 'jsonrpc' key must be \"2.0\""})
-                catch
-                  error:{badkey, _} ->
-                    throw({invalid_response, "Response must contain 'jsornpc' key"})
-                end,
-                Id = try maps:get(<<"id">>, Response) of
-                       Id_ when is_binary(Id_) orelse is_number(Id_) orelse Id_ == null ->
-                         Id_;
-                       Id_ ->
-                         throw({invalid_response, ?FLAT_FORMAT("'id' must be either String, Number or null, [~p] were given", [Id_])})
-                     catch
-                       error:{badkey, _} ->
-                         throw({invalid_response, "Response must contain 'id' field"})
-                     end,
-                Result = maps:get(<<"result">>, Response, not_present),
-                CallError = maps:get(<<"error">>, Response, not_present),
-                ToHandle = case {Result, CallError} of
-                             {not_present, not_present} ->
-                               {invalid_response, "Response must contain either 'result' or 'error', neither are present"};
-                             {not_present, CallError} ->
-                               Handler({call_error, CallError});
-                             {Result, not_present} ->
-                               Handler({result, Result});
-                             {_Result, _CallError} ->
-                               {response_error, "Response must contain either 'result' or 'error', both are present"}
-                           end,
-                {Id, ToHandle}
-              end
-            catch
-              throw:Error ->
-                Error
-            end,
-  Handler(CallObj).
+  {Id, CallObj} = try
+                    begin
+                      Jsonrpc = try maps:get(<<"jsonrpc">>, Response) of
+                                  Version when Version /= <<"2.0">> ->
+                                    {error, {invalid_response, "Value of 'jsonrpc' key must be \"2.0\""}};
+                                  _otherwise ->
+                                    true
+                                catch
+                                  error:{badkey, _} ->
+                                    {error, {invalid_response, "Response must contain 'jsornpc' key"}}
+                                end,
+
+                      CallId = try maps:get(<<"id">>, Response) of
+                                 Id_ when is_binary(Id_) orelse is_number(Id_) orelse Id_ == null ->
+                                   Id_;
+                                 Id_ ->
+                                   throw({Id_, {error, {invalid_response, ?FLAT_FORMAT("'id' must be either String, Number or null, [~p] were given", [Id_])}}})
+                               catch
+                                 error:{badkey, _} ->
+                                   throw({null, {error, {invalid_response, "Response must contain 'id' field"}}})
+                               end,
+
+                      if
+                        Jsonrpc /= true ->
+                          throw({CallId, Jsonrpc});
+                        true -> ignore
+                      end,
+
+                      Result = maps:get(<<"result">>, Response, not_present),
+                      CallError = maps:get(<<"error">>, Response, not_present),
+                      ToHandle = case {Result, CallError} of
+                                   {not_present, not_present} ->
+                                     {error, {invalid_response, "Response must contain either 'result' or 'error', neither are present"}};
+                                   {not_present, CallError} ->
+                                     ErrorCode = maps:get(<<"code">>, CallError, not_present),
+                                     ErrorMessage = maps:get(<<"message">>, CallError, not_present),
+                                     if
+                                       is_number(ErrorCode) andalso is_binary(ErrorMessage) ->
+                                         {error, {call_error, CallError}};
+                                       true ->
+                                         {error, {invalid_response, "Response error object must contain 'code' and 'message' fields"}}
+                                     end;
+                                   {Result, not_present} ->
+                                     {result, Result};
+                                   {_Result, _CallError} ->
+                                     {error, {invalid_response, "Response must contain either 'result' or 'error', both are present"}}
+                                 end,
+                      {CallId, ToHandle}
+                    end
+                  catch
+                    throw:Error ->
+                      Error
+                  end,
+  Handler(Id, CallObj).
 
 call_or_notification_handler_wrapper(Req, ResponseStub, Hndlr) ->
   try
