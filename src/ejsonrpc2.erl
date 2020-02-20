@@ -1,14 +1,13 @@
 -module(ejsonrpc2).
 
--export([ call/4
+-export([ call/2
+        , call/4
         , notification/3
         , handle_call_or_notification/4
         , handle_call_or_notification/5
         , handle_response/3
         , handle_response/4
         ]).
-
--define(JSONRPC_DEBUG, 1). %% Just to shut-up Erlang on unused variables during developemnt
 
 -type positional_params() :: list(term()).
 -type named_params()      :: map().
@@ -22,12 +21,14 @@
 
 -type encoder_fn()       :: fun((map())                                   -> binary()).
 -type decoder_fn()       :: fun((binary())                                -> map()).
--type call_handler_fn()  :: fun((params_type())                           -> any()).
+-type call_handler_fn()  :: fun((id_type(), string(), params_type())      -> any()).
 -type reply_handler_fn() :: fun((id_type(), reply_type() | reply_error()) -> any()).
 -type call_mapper_fn()   :: fun((call_handler_fn(), list(params_type()))  -> list(any())).
 -type reply_mapper_fn()  :: fun((reply_handler_fn(), list(reply_type()))  -> list(any())).
 
 -define(FLAT_FORMAT(Format, Data), lists:flatten(io_lib:format(Format, Data))).
+
+-define(JSONRPC, <<"2.0">>).
 
 -define(PARSE_ERROR_C, -32700).
 -define(INVALID_REQUEST_C, -32600).
@@ -74,41 +75,20 @@
 -define(INTERNAL_ERROR(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?INTERNAL_ERROR_C, ?INTERNAL_ERROR_M), Reply)).
 -endif.
 
+
+-spec call(Batch::list({Method::string_type(), Params::params_type(), Id::id_type()}), Encode::encoder_fn()) -> binary().
+call(Batch, Encode) ->
+  Encode([ make_call(Method, Params, Id) || {Method, Params, Id} <- Batch ]).
+
 -spec call(Method::string_type(), Params::params_type(), Id::id_type(), Encode::encoder_fn()) -> binary().
-call(Method, Params, Id, Encode) when is_map(Params) orelse is_list(Params) ->
-  Call = #{ jsonrpc => "2.0"
-          , method  => Method
-          , params  => Params
-          , id      => Id
-          },
-  Encode(Call);
-
-call(Method, undefined, Id, Encode) ->
-  Call = #{ jsonrpc => "2.0"
-          , method  => Method
-          , id      => Id
-          },
-  Encode(Call);
-
-call(_Method, _Params, _Id, _Encode) ->
-  throw({badarg, params_arg_incorrect_type}).
+call(Method, Params, Id, Encode) ->
+  CallObj = make_call(Method, Params, Id),
+  % io:format(">>>\n~p\n", [CallObj]),
+  Encode(CallObj).
 
 -spec notification(Method::string_type(), Params::params_type(), Encode::encoder_fn()) -> binary().
-notification(Method, Params, Encode) when is_map(Params) orelse is_list(Params) ->
-  Call = #{ jsonrpc => "2.0"
-          , method  => Method
-          , params  => Params
-          },
-  Encode(Call);
-
-notification(Method, undefined, Encode) ->
-  Call = #{ jsonrpc => "2.0"
-          , method  => Method
-          },
-  Encode(Call);
-
-notification(_Method, _Params, _Encode) ->
-  throw({badarg, params_arg_incorrect_type}).
+notification(Method, Params, Encode) ->
+  Encode(make_notification(Method, Params)).
 
 -spec handle_call_or_notification(Payload::binary(), Handler::call_handler_fn(), Decode::decoder_fn(), Encode::encoder_fn()) -> binary().
 handle_call_or_notification(Payload, Handler, Decode, Encode) ->
@@ -116,7 +96,7 @@ handle_call_or_notification(Payload, Handler, Decode, Encode) ->
 
 -spec handle_call_or_notification(Payload::binary(), Handler::call_handler_fn(), Decode::decoder_fn(), Encode::encoder_fn(), MapFn::call_mapper_fn()) -> binary().
 handle_call_or_notification(Payload, Handler, Decode, Encode, MapFn) ->
-  ResponseStub = #{jsonrpc => "2.0", id => null},
+  ResponseStub = #{jsonrpc => ?JSONRPC, id => null},
   Response = try Decode(Payload) of
                Decoded when is_list(Decoded)->
                  Responses = MapFn(fun(Req) ->
@@ -142,11 +122,11 @@ handle_call_or_notification(Payload, Handler, Decode, Encode, MapFn) ->
       Encode(Response)
   end.
 
--spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn()) -> list(term()).
+-spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn()) -> list(term() | reply_error()).
 handle_response(Payload, Handler, Decode) ->
-  Decode(Payload, Handler, Decode, fun pmap/2).
+  handle_response(Payload, Handler, Decode, fun pmap/2).
 
--spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn(), MapFn::reply_mapper_fn()) -> list(any()) | reply_error().
+-spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn(), MapFn::reply_mapper_fn()) -> list(term() | reply_error()).
 handle_response(Payload, Handler, Decode, MapFn) ->
   try Decode(Payload) of
     Decoded when is_list(Decoded) ->
@@ -154,21 +134,58 @@ handle_response(Payload, Handler, Decode, MapFn) ->
                 response_handler_wrapper(Response, Handler)
             end, Decoded);
     Decoded when is_map(Decoded) ->
-      response_handler_wrapper(Decoded, Handler);
+      [response_handler_wrapper(Decoded, Handler)];
     Decoded ->
-      {error, {invalid_response, ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}}
+      [{error, {invalid_response, ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}}]
   catch
     Error ->
-      {error, {parse_error, Error}}
+      [{error, {parse_error, Error}}]
   end.
 
+%% --------------------------------------
 %% Internals
+%% --------------------------------------
+
+make_call(Method, Params, Id) when Params == [] orelse Params == #{} orelse Params == undefined ->
+  Call = #{ jsonrpc => ?JSONRPC
+          , method  => Method
+          , id      => Id
+          },
+  Call;
+
+make_call(Method, Params, Id) when is_map(Params) orelse is_list(Params) ->
+  Call = #{ jsonrpc => ?JSONRPC
+          , method  => Method
+          , params  => Params
+          , id      => Id
+          },
+  Call;
+
+make_call(_Method, _Params, _Id) ->
+  throw({badarg, params_arg_incorrect_type}).
+
+
+make_notification(Method, Params) when is_map(Params) orelse is_list(Params) ->
+  Call = #{ jsonrpc => ?JSONRPC
+          , method  => Method
+          , params  => Params
+          },
+  Call;
+
+make_notification(Method, Params) when Params == undefined orelse Params == [] ->
+  Call = #{ jsonrpc => ?JSONRPC
+          , method  => Method
+          },
+  Call;
+
+make_notification(_Method, _Params) ->
+  throw({badarg, params_arg_incorrect_type}).
 
 response_handler_wrapper(Response, Handler) ->
   {Id, CallObj} = try
                     begin
                       Jsonrpc = try maps:get(<<"jsonrpc">>, Response) of
-                                  Version when Version /= <<"2.0">> ->
+                                  Version when Version /= ?JSONRPC ->
                                     {error, {invalid_response, "Value of 'jsonrpc' key must be \"2.0\""}};
                                   _otherwise ->
                                     true
@@ -220,7 +237,7 @@ response_handler_wrapper(Response, Handler) ->
                   end,
   Handler(Id, CallObj).
 
-call_or_notification_handler_wrapper(Req, ResponseStub, Hndlr) ->
+call_or_notification_handler_wrapper(Req, ResponseStub, Handler) ->
   try
     begin
       Id = case maps:get(<<"id">>, Req, notification) of
@@ -232,8 +249,9 @@ call_or_notification_handler_wrapper(Req, ResponseStub, Hndlr) ->
       PreResponse = maps:put(id, Id, ResponseStub),
 
       try maps:get(<<"jsonrpc">>, Req) of
-        Version when Version /= <<"2.0">> ->
-          throw(?INVALID_REQUEST(PreResponse, "Value of 'jsonrpc' key must be \"2.0\"", []))
+        Version when Version /= ?JSONRPC ->
+          throw(?INVALID_REQUEST(PreResponse, "Value of 'jsonrpc' key must be \"2.0\"", []));
+        _otherwise -> ignore
       catch
         error:{badkey, _} ->
           throw(?INVALID_REQUEST(PreResponse, "Request must contain 'jsornpc' key", []))
@@ -250,7 +268,7 @@ call_or_notification_handler_wrapper(Req, ResponseStub, Hndlr) ->
 
       Params = maps:get(<<"params">>, Req, []),
 
-      try Hndlr(Method, Params) of
+      try Handler(Id, Method, Params) of
         method_not_found ->
           ?METHOD_NOT_FOUND(PreResponse, "Method ~p not found on this server", [Method]);
         Result ->
@@ -276,4 +294,3 @@ gather([H | T]) ->
   end;
 
 gather([]) -> [].
-
