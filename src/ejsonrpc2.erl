@@ -269,13 +269,13 @@ call_or_notification_handler_wrapper(Req, ResponseStub, Handler) ->
       Params = maps:get(<<"params">>, Req, []),
 
       try Handler(Id, Method, Params) of
-        method_not_found ->
-          ?METHOD_NOT_FOUND(PreResponse, "Method ~p not found on this server", [Method]);
         Result ->
           maps:put(result, Result, PreResponse)
       catch
+        throw:method_not_found ->
+          ?METHOD_NOT_FOUND(PreResponse, "Method ~p not found on this server", [Method]);
         HndlrError ->
-          ?INTERNAL_ERROR(PreResponse, "~p", [HndlrError])
+          ?INTERNAL_ERROR(PreResponse, "Internal error: ~p", [HndlrError])
       end
     end
   catch

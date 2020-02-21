@@ -8,6 +8,7 @@
         , 'prop__id_must_be_null_or_string_or_number'/0
         , 'prop__jsonrpc_version_in_response_must_be_2.0'/0
         , 'prop__response_id_must_equal_request_id'/0
+        ,'prop__response_must_contain_either_result_or_error'/0
         ]).
 
 'prop__jsonrpc_version_in_request_must_be_2.0'() ->
@@ -63,8 +64,21 @@
            Response = ejsonrpc2:handle_call_or_notification(Call, fun call_handler/3, fun jsone:decode/1, fun jsone:encode/1),
            Decoded = jsone:decode(Response),
            ResponseId = maps:get(<<"id">>, Decoded, not_found),
-           io:format(">>> ~p == ~p\n~p\n~p\n\n\n", [Id, ResponseId, Call, Response]),
            Id == ResponseId
+         end).
+
+'prop__response_must_contain_either_result_or_error'() ->
+  ?FORALL({Method, Params, Id}, correct_request(),
+         begin
+           Call = ejsonrpc2:call(Method, Params, Id, fun jsone:encode/1),
+           Response = ejsonrpc2:handle_call_or_notification(Call, fun call_handler/3, fun jsone:decode/1, fun jsone:encode/1),
+           Decoded = jsone:decode(Response),
+           ErrorObj = maps:get(<<"error">>, Decoded, not_found),
+           ResObj = maps:get(<<"result">>, Decoded, not_found),
+           % io:format(">>> ~p\n~p\n\n", [ErrorObj, ResObj]),
+           (ErrorObj == not_found andalso ResObj /= not_found)
+           orelse
+           (ErrorObj /= not_found andalso ResObj == not_found)
          end).
 
 %% -----------------------------
@@ -72,10 +86,38 @@
 %% -----------------------------
 
 call_handler(Id, Method, Params) ->
-  ok.
+  case Method of
+    <<"test_method_returns_params">> ->
+      Params;
+    <<"test_method_returns_list">> when is_map(Params) ->
+      maps:to_list(Params);
+    <<"test_method_returns_list">> when is_list(Params) ->
+      Params;
+    <<"test_method_wrap_in_list">> ->
+      [Params];
+    <<"test_method_wrap_in_map">> ->
+      #{key => Params};
+    <<"test_method_throws_error">> ->
+      throw("WTF!");
+    _ ->
+      throw(method_not_found)
+  end.
+
+random_method() ->
+  oneof([ test_method_returns_params
+        , test_method_returns_list
+        , test_method_wrap_in_list
+        , test_method_wrap_in_map
+        , test_method_throws_error
+        , binary_string()
+        , binary_string()
+        , binary_string()
+        , binary_string()
+        , binary_string()
+        ]).
 
 correct_request() ->
-  Method = binary_string(),
+  Method = random_method(),
   Params = oneof([array(), object()]),
   Id = oneof([null, binary_string(), js_number()]),
   {Method, Params, Id}.
