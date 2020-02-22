@@ -75,7 +75,6 @@
            Decoded = jsone:decode(Response),
            ErrorObj = maps:get(<<"error">>, Decoded, not_found),
            ResObj = maps:get(<<"result">>, Decoded, not_found),
-           % io:format(">>> ~p\n~p\n\n", [ErrorObj, ResObj]),
            (ErrorObj == not_found andalso ResObj /= not_found)
            orelse
            (ErrorObj /= not_found andalso ResObj == not_found)

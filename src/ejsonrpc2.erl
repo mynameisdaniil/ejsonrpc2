@@ -46,56 +46,103 @@
 -define(ERROR_MAP(Code, Message, Data), #{code => Code, message => Message, data => Data}).
 
 -ifdef(JSONRPC_DEBUG).
--define(PARSE_ERROR(Reply, Format, Data), maps:put(error, ?ERROR_MAP(?PARSE_ERROR_C, ?PARSE_ERROR_M, ?FLAT_FORMAT(Format, Data)), Reply)).
+-define(PARSE_ERROR(Reply, Format, Data),
+        maps:put(error, ?ERROR_MAP(?PARSE_ERROR_C, ?PARSE_ERROR_M, ?FLAT_FORMAT(Format, Data)), Reply)).
 -else.
--define(PARSE_ERROR(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?PARSE_ERROR_C, ?PARSE_ERROR_M), Reply)).
+-define(PARSE_ERROR(Reply, _Format, _Data),
+        maps:put(error, ?ERROR_MAP(?PARSE_ERROR_C, ?PARSE_ERROR_M), Reply)).
 -endif.
 
 -ifdef(JSONRPC_DEBUG).
--define(INVALID_REQUEST(Reply, Format, Data), maps:put(error, ?ERROR_MAP(?INVALID_REQUEST_C, ?INVALID_REQUEST_M, ?FLAT_FORMAT(Format, Data)), Reply)).
+-define(INVALID_REQUEST(Reply, Format, Data),
+        maps:put(error, ?ERROR_MAP(?INVALID_REQUEST_C, ?INVALID_REQUEST_M, ?FLAT_FORMAT(Format, Data)), Reply)).
 -else.
--define(INVALID_REQUEST(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?INVALID_REQUEST_C, ?INVALID_REQUEST_M), Reply)).
+-define(INVALID_REQUEST(Reply, _Format, _Data),
+        maps:put(error, ?ERROR_MAP(?INVALID_REQUEST_C, ?INVALID_REQUEST_M), Reply)).
 -endif.
 
 -ifdef(JSONRPC_DEBUG).
--define(METHOD_NOT_FOUND(Reply, Format, Data), maps:put(error, ?ERROR_MAP(?METHOD_NOT_FOUND_C, ?METHOD_NOT_FOUND_M, ?FLAT_FORMAT(Format, Data)), Reply)).
+-define(METHOD_NOT_FOUND(Reply, Format, Data),
+        maps:put(error, ?ERROR_MAP(?METHOD_NOT_FOUND_C, ?METHOD_NOT_FOUND_M, ?FLAT_FORMAT(Format, Data)), Reply)).
 -else.
--define(METHOD_NOT_FOUND(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?METHOD_NOT_FOUND_C, ?METHOD_NOT_FOUND_M), Reply)).
+-define(METHOD_NOT_FOUND(Reply, _Format, _Data),
+        maps:put(error, ?ERROR_MAP(?METHOD_NOT_FOUND_C, ?METHOD_NOT_FOUND_M), Reply)).
 -endif.
 
 -ifdef(JSONRPC_DEBUG).
--define(INVALID_PARAMS(Reply, Format, Data), maps:put(error, ?ERROR_MAP(?INVALID_PARAMS_C, ?INVALID_PARAMS_M, Data, ?FLAT_FORMAT(Format, Data)), Reply)).
+-define(INVALID_PARAMS(Reply, Format, Data),
+        maps:put(error, ?ERROR_MAP(?INVALID_PARAMS_C, ?INVALID_PARAMS_M, Data, ?FLAT_FORMAT(Format, Data)), Reply)).
 -else.
--define(INVALID_PARAMS(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?INVALID_PARAMS_C, ?INVALID_PARAMS_M), Reply)).
+-define(INVALID_PARAMS(Reply, _Format, _Data),
+        maps:put(error, ?ERROR_MAP(?INVALID_PARAMS_C, ?INVALID_PARAMS_M), Reply)).
 -endif.
 
 -ifdef(JSONRPC_DEBUG).
--define(INTERNAL_ERROR(Reply, Format, Data), maps:put(error, ?ERROR_MAP(?INTERNAL_ERROR_C, ?INTERNAL_ERROR_M, ?FLAT_FORMAT(Format, Data)), Reply)).
+-define(INTERNAL_ERROR(Reply, Format, Data),
+        maps:put(error, ?ERROR_MAP(?INTERNAL_ERROR_C, ?INTERNAL_ERROR_M, ?FLAT_FORMAT(Format, Data)), Reply)).
 -else.
--define(INTERNAL_ERROR(Reply, _Format, _Data), maps:put(error, ?ERROR_MAP(?INTERNAL_ERROR_C, ?INTERNAL_ERROR_M), Reply)).
+-define(INTERNAL_ERROR(Reply, _Format, _Data),
+        maps:put(error, ?ERROR_MAP(?INTERNAL_ERROR_C, ?INTERNAL_ERROR_M), Reply)).
 -endif.
 
 
--spec call(Batch::list({Method::string_type(), Params::params_type(), Id::id_type()}), Encode::encoder_fn()) -> binary().
-call(Batch, Encode) ->
+-spec call( Batch::list({ Method::string_type()
+                        , Params::params_type()
+                        , Id::id_type()})
+          , Encode::encoder_fn()
+          ) -> binary().
+call( Batch
+    , Encode) ->
   Encode([ make_call(Method, Params, Id) || {Method, Params, Id} <- Batch ]).
 
--spec call(Method::string_type(), Params::params_type(), Id::id_type(), Encode::encoder_fn()) -> binary().
-call(Method, Params, Id, Encode) ->
+-spec call( Method::string_type()
+          , Params::params_type()
+          , Id::id_type()
+          , Encode::encoder_fn()
+          ) -> binary().
+call( Method
+     , Params
+     , Id
+     , Encode
+    ) ->
   CallObj = make_call(Method, Params, Id),
   % io:format(">>>\n~p\n", [CallObj]),
   Encode(CallObj).
 
--spec notification(Method::string_type(), Params::params_type(), Encode::encoder_fn()) -> binary().
-notification(Method, Params, Encode) ->
+-spec notification( Method::string_type()
+                  , Params::params_type()
+                  , Encode::encoder_fn()
+                  ) -> binary().
+notification( Method
+            , Params
+            , Encode
+            ) ->
   Encode(make_notification(Method, Params)).
 
--spec handle_call_or_notification(Payload::binary(), Handler::call_handler_fn(), Decode::decoder_fn(), Encode::encoder_fn()) -> binary().
-handle_call_or_notification(Payload, Handler, Decode, Encode) ->
+-spec handle_call_or_notification( Payload::binary()
+                                 , Handler::call_handler_fn()
+                                 , Decode::decoder_fn()
+                                 , Encode::encoder_fn()
+                                 ) -> binary().
+handle_call_or_notification( Payload
+                           , Handler
+                           , Decode
+                           , Encode
+                           ) ->
   handle_call_or_notification(Payload, Handler, Decode, Encode, fun pmap/2).
 
--spec handle_call_or_notification(Payload::binary(), Handler::call_handler_fn(), Decode::decoder_fn(), Encode::encoder_fn(), MapFn::call_mapper_fn()) -> binary().
-handle_call_or_notification(Payload, Handler, Decode, Encode, MapFn) ->
+-spec handle_call_or_notification( Payload::binary()
+                                 , Handler::call_handler_fn()
+                                 , Decode::decoder_fn()
+                                 , Encode::encoder_fn()
+                                 , MapFn::call_mapper_fn()
+                                 ) -> binary().
+handle_call_or_notification( Payload
+                           , Handler
+                           , Decode
+                           , Encode
+                           , MapFn
+                           ) ->
   ResponseStub = #{jsonrpc => ?JSONRPC, id => null},
   Response = try Decode(Payload) of
                Decoded when is_list(Decoded)->
@@ -122,12 +169,26 @@ handle_call_or_notification(Payload, Handler, Decode, Encode, MapFn) ->
       Encode(Response)
   end.
 
--spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn()) -> list(term() | reply_error()).
-handle_response(Payload, Handler, Decode) ->
+-spec handle_response( Payload::binary()
+                     , Handler::reply_handler_fn()
+                     , Decode::decoder_fn()
+                     ) -> list(term() | reply_error()).
+handle_response( Payload
+               , Handler
+               , Decode
+               ) ->
   handle_response(Payload, Handler, Decode, fun pmap/2).
 
--spec handle_response(Payload::binary(), Handler::reply_handler_fn(), Decode::decoder_fn(), MapFn::reply_mapper_fn()) -> list(term() | reply_error()).
-handle_response(Payload, Handler, Decode, MapFn) ->
+-spec handle_response( Payload::binary()
+                     , Handler::reply_handler_fn()
+                     , Decode::decoder_fn()
+                     , MapFn::reply_mapper_fn()
+                     ) -> list(term() | reply_error()).
+handle_response( Payload
+               , Handler
+               , Decode
+               , MapFn
+               ) ->
   try Decode(Payload) of
     Decoded when is_list(Decoded) ->
       MapFn(fun(Response) ->
@@ -136,7 +197,9 @@ handle_response(Payload, Handler, Decode, MapFn) ->
     Decoded when is_map(Decoded) ->
       [response_handler_wrapper(Decoded, Handler)];
     Decoded ->
-      [{error, {invalid_response, ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}}]
+      [{error,
+        {invalid_response,
+         ?FLAT_FORMAT("Response must be object or list of objects, [~p] were given", [Decoded])}}]
   catch
     Error ->
       [{error, {parse_error, Error}}]
@@ -187,7 +250,7 @@ response_handler_wrapper(Response, Handler) ->
                       Jsonrpc = try maps:get(<<"jsonrpc">>, Response) of
                                   Version when Version /= ?JSONRPC ->
                                     {error, {invalid_response, "Value of 'jsonrpc' key must be \"2.0\""}};
-                                  _otherwise ->
+                                  _Otherwise ->
                                     true
                                 catch
                                   error:{badkey, _} ->
@@ -198,7 +261,10 @@ response_handler_wrapper(Response, Handler) ->
                                  Id_ when is_binary(Id_) orelse is_number(Id_) orelse Id_ == null ->
                                    Id_;
                                  Id_ ->
-                                   throw({Id_, {error, {invalid_response, ?FLAT_FORMAT("'id' must be either String, Number or null, [~p] were given", [Id_])}}})
+                                   throw({Id_,
+                                          {error,
+                                           {invalid_response,
+                                            ?FLAT_FORMAT("'id' must be either String, Number or null, [~p] were given", [Id_])}}})
                                catch
                                  error:{badkey, _} ->
                                    throw({null, {error, {invalid_response, "Response must contain 'id' field"}}})
@@ -214,7 +280,9 @@ response_handler_wrapper(Response, Handler) ->
                       CallError = maps:get(<<"error">>, Response, not_present),
                       ToHandle = case {Result, CallError} of
                                    {not_present, not_present} ->
-                                     {error, {invalid_response, "Response must contain either 'result' or 'error', neither are present"}};
+                                     {error,
+                                      {invalid_response,
+                                       "Response must contain either 'result' or 'error', neither are present"}};
                                    {not_present, CallError} ->
                                      ErrorCode = maps:get(<<"code">>, CallError, not_present),
                                      ErrorMessage = maps:get(<<"message">>, CallError, not_present),
@@ -222,12 +290,16 @@ response_handler_wrapper(Response, Handler) ->
                                        is_number(ErrorCode) andalso is_binary(ErrorMessage) ->
                                          {error, {call_error, CallError}};
                                        true ->
-                                         {error, {invalid_response, "Response error object must contain 'code' and 'message' fields"}}
+                                         {error,
+                                          {invalid_response,
+                                           "Response error object must contain 'code' and 'message' fields"}}
                                      end;
                                    {Result, not_present} ->
                                      {result, Result};
                                    {_Result, _CallError} ->
-                                     {error, {invalid_response, "Response must contain either 'result' or 'error', both are present"}}
+                                     {error,
+                                      {invalid_response,
+                                       "Response must contain either 'result' or 'error', both are present"}}
                                  end,
                       {CallId, ToHandle}
                     end
@@ -244,14 +316,17 @@ call_or_notification_handler_wrapper(Req, ResponseStub, Handler) ->
              Id_ when is_number(Id_) orelse is_binary(Id_) orelse Id_ == null orelse Id_ == notification ->
                Id_;
              Id_ ->
-               throw(?INVALID_REQUEST(ResponseStub, "If request contains 'id' key it should be either String, Number or null, [~p] were given", [Id_]))
+               throw(?INVALID_REQUEST( ResponseStub
+                                     , "If request contains 'id' key it should be either String, Number or null, [~p] were given"
+                                     , [Id_]
+                                     ))
            end,
       PreResponse = maps:put(id, Id, ResponseStub),
 
       try maps:get(<<"jsonrpc">>, Req) of
         Version when Version /= ?JSONRPC ->
           throw(?INVALID_REQUEST(PreResponse, "Value of 'jsonrpc' key must be \"2.0\"", []));
-        _otherwise -> ignore
+        _Otherwise -> ignore
       catch
         error:{badkey, _} ->
           throw(?INVALID_REQUEST(PreResponse, "Request must contain 'jsornpc' key", []))
