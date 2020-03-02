@@ -1,6 +1,7 @@
 -type positional_params() :: list(term()).
 -type named_params()      :: map().
 -type string_type()       :: string() | binary() | atom().
+-type method_type()       :: string_type().
 -type params_type()       :: positional_params() | named_params() | undefined.
 -type id_type()           :: string() | integer().
 -type reply_type()        :: {reply, term()}.

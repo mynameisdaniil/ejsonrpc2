@@ -71,7 +71,7 @@
 -endif.
 
 
--spec call( Batch::list({ Method::string_type()
+-spec call( Batch::list({ Method::method_type()
                         , Params::params_type()
                         , Id::id_type()})
           , Encode::encoder_fn()
@@ -80,7 +80,7 @@ call( Batch
     , Encode) ->
   Encode([ make_call(Method, Params, Id) || {Method, Params, Id} <- Batch ]).
 
--spec call( Method::string_type()
+-spec call( Method::method_type()
           , Params::params_type()
           , Id::id_type()
           , Encode::encoder_fn()
@@ -94,7 +94,7 @@ call( Method
   % io:format(">>>\n~p\n", [CallObj]),
   Encode(CallObj).
 
--spec notification( Method::string_type()
+-spec notification( Method::method_type()
                   , Params::params_type()
                   , Encode::encoder_fn()
                   ) -> binary().
